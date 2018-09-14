@@ -1,0 +1,50 @@
+#!/usr/bin/env python
+
+import json
+import argparse
+import sys
+import os
+import subprocess
+
+parser = argparse.ArgumentParser(description='Add puppet module to metadata.json')
+parser.add_argument('--version', nargs="?", default="latest")
+parser.add_argument('action', nargs="*")
+
+args = parser.parse_args()
+
+if len(sys.argv) == 1:
+    parser.print_help(sys.stderr)
+    sys.exit(1)
+
+if not args.action[0] in ['install']:
+    parser.print_help(sys.stderr)
+    sys.exit(1)
+
+version = args.version
+actionName = args.action[0]
+module = None if len(args.action) < 2 else args.action[1]
+
+if module != None:
+    with open('composer/metadata.json') as json_data:
+        data = json.load(json_data)
+
+    for item in data['dependencies']:
+        if item['name'] == module:
+            print "Module %s is already declared in metadata.json" % (module)
+            exit(1)
+
+    data['dependencies'].extend([{'version_requirement': version, 'name': module}])
+
+    print "Writing metadata.json"
+    with open('composer/metadata.json', 'w') as outfile:
+        json.dump(data, outfile, indent=4)
+
+if actionName == 'install':
+    cwd = os.path.dirname(os.path.realpath(__file__))
+    os.chdir( cwd )
+
+    print "Updating modules"
+    subprocess.call(["rm", "-rf", "./modules/composer"])
+    subprocess.call(["tar", "-zcf", "composer.tar.gz", "composer"])
+    print subprocess.check_output(["puppet", "module", "install", "composer.tar.gz", "--modulepath=./modules"])
+    subprocess.call(["rm", "-f", "composer.tar.gz"])
